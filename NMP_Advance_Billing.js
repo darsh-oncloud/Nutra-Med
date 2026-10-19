@@ -1,3 +1,4 @@
+
 /**
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
@@ -6,21 +7,38 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
 
     const afterSubmit = (context) => {
         try {
-            if (![context.UserEventType.CREATE,context.UserEventType.EDIT,context.UserEventType.SHIP].includes(context.type)) return;
+            log.audit('Script Triggered',{
+                event:context.type,
+                fulfillmentId:context.newRecord.id
+            });
+
+            if (![context.UserEventType.CREATE,context.UserEventType.EDIT,
+                  context.UserEventType.PACK,context.UserEventType.SHIP].includes(context.type)) return;
 
             const ff = record.load({type:record.Type.ITEM_FULFILLMENT,id:context.newRecord.id});
             const soId = ff.getValue('createdfrom');
-            if (!soId) return;
+
+            if (!soId) {
+                log.audit('Script Stopped','No Sales Order linked');
+                return;
+            }
 
             const so = record.load({type:record.Type.SALES_ORDER,id:soId});
             const advance = so.getValue('custbody_advance_billing');
             const shipped = ff.getValue('shipstatus') === 'C';
             const ifNumber = ff.getValue('tranid');
 
-            // Do nothing unless Advance Billing is checked or IF is Shipped
-            if (!advance && !shipped) return;
+            log.audit('IF Validation',{
+                ifNumber,soId,advance,
+                shipstatus:ff.getValue('shipstatus'),
+                shipped,event:context.type
+            });
 
-            // Find existing invoice for this IF
+            if (!advance && !shipped) {
+                log.audit('Script Stopped','Not Advanced Billing and not Shipped');
+                return;
+            }
+
             const existing = search.create({
                 type:search.Type.INVOICE,
                 filters:[
@@ -31,16 +49,25 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
                 columns:['internalid','custbody_related_je']
             }).run().getRange({start:0,end:1});
 
+            log.audit('Existing Invoice Search',{
+                ifNumber,
+                existingCount:existing.length,
+                invoiceId:existing.length ? existing[0].id : null
+            });
+
             if (existing.length) {
                 const invoiceId = existing[0].id;
                 const jeId = existing[0].getValue('custbody_related_je');
 
-                // Reverse Advance Billing JE when IF becomes Shipped
                 if (shipped && jeId) {
                     const memo = 'Advance Billing Reversal - Invoice '+invoiceId;
+
                     const reversed = search.create({
                         type:search.Type.JOURNAL_ENTRY,
-                        filters:[['mainline','is','T'],'AND',['memo','is',memo]],
+                        filters:[
+                            ['mainline','is','T'],
+                            'AND',['memo','is',memo]
+                        ],
                         columns:['internalid']
                     }).run().getRange({start:0,end:1});
 
@@ -50,7 +77,7 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
 
                         for (const field of ['subsidiary','currency','exchangerate']) {
                             const value = original.getValue(field);
-                            if (value) je.setValue({fieldId:field,value:value});
+                            if (value) je.setValue({fieldId:field,value});
                         }
 
                         je.setValue({fieldId:'memo',value:memo});
@@ -68,20 +95,30 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
                         }
 
                         const reversalId = je.save();
-                        log.debug('COGS JE Reversed',{ifNumber,invoiceId,jeId,reversalId});
+                        log.audit('COGS JE Reversed',{ifNumber,invoiceId,jeId,reversalId});
+                    } else {
+                        log.audit('Reversal Already Exists',{ifNumber,invoiceId});
                     }
+                } else {
+                    log.audit('Invoice Already Exists',{ifNumber,invoiceId,shipped});
                 }
                 return;
             }
 
-            // Get IF line quantities
             const lines = {};
+
             for (let i=0; i<ff.getLineCount({sublistId:'item'}); i++) {
                 const line = ff.getSublistValue({sublistId:'item',fieldId:'orderline',line:i});
                 const qty = +ff.getSublistValue({sublistId:'item',fieldId:'quantity',line:i}) || 0;
                 if (line && qty > 0) lines[line] = (lines[line] || 0) + qty;
             }
-            if (!Object.keys(lines).length) return;
+
+            log.audit('Fulfillment Lines',lines);
+
+            if (!Object.keys(lines).length) {
+                log.audit('Script Stopped','No fulfillment quantities found');
+                return;
+            }
 
             const invoice = record.transform({
                 fromType:record.Type.SALES_ORDER,
@@ -92,7 +129,8 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
             invoice.setValue({fieldId:'custbody_sourced_if',value:ifNumber});
             invoice.setValue({
                 fieldId:'memo',
-                value:(shipped ? 'Normal Shipping' : 'Advance Billing')+' - IF '+ifNumber+' (ID '+ff.id+')'
+                value:(shipped ? 'Normal Shipping' : 'Advance Billing')+
+                      ' - IF '+ifNumber+' (ID '+ff.id+')'
             });
 
             let totalCost = 0;
@@ -108,44 +146,67 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
 
                 const qty = lines[line];
                 matched++;
-                invoice.setSublistValue({sublistId:'item',fieldId:'quantity',line:i,value:qty});
+
+                invoice.setSublistValue({
+                    sublistId:'item',fieldId:'quantity',line:i,value:qty
+                });
 
                 if (!shipped) {
                     const itemId = invoice.getSublistValue({sublistId:'item',fieldId:'item',line:i});
+
                     const item = search.lookupFields({
-                        type:search.Type.ITEM,id:itemId,
+                        type:search.Type.ITEM,
+                        id:itemId,
                         columns:['averagecost','lastpurchaseprice']
                     });
 
                     const cost = (+item.averagecost) || (+item.lastpurchaseprice) || 1;
                     totalCost += qty * cost;
+
+                    log.debug('Cost Line '+i,{itemId,qty,cost,lineCost:qty*cost});
                 }
             }
 
-            if (!matched) return;
+            log.audit('Invoice Ready',{
+                ifNumber,matched,
+                fulfillmentLines:Object.keys(lines).length,
+                totalCost
+            });
+
+            if (!matched) {
+                log.audit('Script Stopped','No invoice lines matched');
+                return;
+            }
+
             if (matched !== Object.keys(lines).length)
                 throw Error('Some IF lines are missing from invoice transform');
 
             const invoiceId = invoice.save();
 
-            // Normal Shipping: No JE
             if (shipped) {
-                log.debug('Normal Invoice Created',{ifNumber,invoiceId});
+                log.audit('Normal Invoice Created',{ifNumber,invoiceId});
                 return;
             }
 
-            // Advance Billing: Create COGS JE
             const script = runtime.getCurrentScript();
             const debitAccount = +script.getParameter({name:'custscript_je_debit_account'});
             const creditAccount = +script.getParameter({name:'custscript_je_credit_account'});
 
-            if (!debitAccount || !creditAccount) throw Error('JE account parameters missing');
-            if (totalCost <= 0) throw Error('Invalid COGS amount');
+            if (!debitAccount || !creditAccount)
+                throw Error('JE account parameters missing');
+
+            if (totalCost <= 0)
+                throw Error('Invalid COGS amount');
 
             const je = record.create({type:record.Type.JOURNAL_ENTRY,isDynamic:true});
             const subsidiary = invoice.getValue('subsidiary');
+
             if (subsidiary) je.setValue({fieldId:'subsidiary',value:subsidiary});
-            je.setValue({fieldId:'memo',value:'Advance Billing COGS - Invoice '+invoiceId});
+
+            je.setValue({
+                fieldId:'memo',
+                value:'Advance Billing COGS - Invoice '+invoiceId
+            });
 
             for (const entry of [
                 {account:debitAccount,field:'debit'},
@@ -154,21 +215,29 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
                 je.selectNewLine({sublistId:'line'});
                 je.setCurrentSublistValue({sublistId:'line',fieldId:'account',value:entry.account});
                 je.setCurrentSublistValue({sublistId:'line',fieldId:entry.field,value:totalCost});
-                je.setCurrentSublistValue({sublistId:'line',fieldId:'memo',value:'Advance Billing COGS - Invoice '+invoiceId});
+                je.setCurrentSublistValue({
+                    sublistId:'line',fieldId:'memo',
+                    value:'Advance Billing COGS - Invoice '+invoiceId
+                });
                 je.commitLine({sublistId:'line'});
             }
 
             const jeId = je.save();
 
             record.submitFields({
-                type:record.Type.INVOICE,id:invoiceId,
+                type:record.Type.INVOICE,
+                id:invoiceId,
                 values:{custbody_related_je:jeId}
             });
 
-            log.debug('Advance Billing Completed',{ifNumber,invoiceId,jeId,totalCost});
+            log.audit('Advance Billing Completed',{
+                ifNumber,invoiceId,jeId,totalCost
+            });
 
         } catch (e) {
-            log.error('IF Invoicing Error',{name:e.name,message:e.message,stack:e.stack});
+            log.error('IF Invoicing Error',{
+                name:e.name,message:e.message,stack:e.stack
+            });
             throw e;
         }
     };

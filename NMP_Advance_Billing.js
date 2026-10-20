@@ -22,8 +22,7 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
                 return;
             }
 
-            const so = record.load({type:record.Type.SALES_ORDER,id:soId});
-            const advance = so.getValue('custbody_advance_billing');
+            const advance = ff.getValue('custbody_advance_billing');
             const shipped = ff.getValue('shipstatus') === 'C';
             const ifNumber = ff.getValue('tranid');
 

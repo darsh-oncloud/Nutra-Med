@@ -55,7 +55,7 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
 
             if (existing.length) {
                 const invoiceId = existing[0].id;
-                const jeId = existing[0].getValue('custbody_related_je');
+                const jeId = ff.getValue('custbody_related_je');
 
                 if (shipped && jeId) {
                     const memo = 'Advance Billing Reversal - Invoice '+invoiceId;
@@ -223,8 +223,8 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
             const jeId = je.save();
 
             record.submitFields({
-                type:record.Type.INVOICE,
-                id:invoiceId,
+                type:record.Type.ITEM_FULFILLMENT,
+                id:ff.id,
                 values:{custbody_related_je:jeId}
             });
 

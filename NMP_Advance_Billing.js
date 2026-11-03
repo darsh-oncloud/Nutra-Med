@@ -20,7 +20,15 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
             if (!soId) {
                 log.audit('Script Stopped','No Sales Order linked');
                 return;
-            }
+            } 
+
+            const customerId = ff.getValue('entity');
+
+            const customerAdvance = search.lookupFields({
+                type:search.Type.CUSTOMER,
+                id:customerId,
+                columns:['custentity_advance_billing']
+            }).custentity_advance_billing;
 
             const advance = ff.getValue('custbody_advance_billing');
             const shipped = ff.getValue('shipstatus') === 'C';
@@ -32,8 +40,8 @@ define(['N/record','N/search','N/runtime','N/log'], (record, search, runtime, lo
                 shipped,event:context.type
             });
 
-            if (!advance && !shipped) {
-                log.audit('Script Stopped','Not Advanced Billing and not Shipped');
+            if (!advance && (!shipped || !customerAdvance)) {
+                log.audit('Script Stopped','Billing conditions not met');
                 return;
             }
 

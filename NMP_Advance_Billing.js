@@ -132,6 +132,14 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
             }
             if (Object.keys(flatLines).length) log.audit('Flat Rate Lines', flatLines);
 
+            // Lines expected on the invoice = IF lines minus flat lines already fully billed.
+            // If nothing is left, stop BEFORE the transform: NetSuite throws
+            // INVALID_INITIALIZE_REF when the SO has nothing left to bill.
+            const expected = Object.keys(lines).filter((l) => !(flatLines[l] && flatLines[l].alreadyBilled)).length;
+            if (!expected) {
+                return log.audit('Script Stopped', { reason: 'Nothing to invoice - flat rate line(s) already fully billed', ifNumber, soId });
+            }
+
             /* ---------- Build invoice ---------- */
             const invoice = record.transform({
                 fromType: record.Type.SALES_ORDER,
@@ -179,9 +187,6 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                     });
                 }
             }
-
-            // Lines expected on the invoice = IF lines minus flat lines already fully billed on the SO
-            const expected = Object.keys(lines).filter((l) => !(flatLines[l] && flatLines[l].alreadyBilled)).length;
 
             log.audit('Invoice Ready', { ifNumber, matched, expected, fulfillmentLines: Object.keys(lines).length });
 

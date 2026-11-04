@@ -3,8 +3,9 @@
  * @NScriptType UserEventScript
  *
  * Item Fulfillment -> Auto Invoice (+ Advance Billing COGS JE / reversal)
- * Flat Rate rule: SO line with Rate = 0 and Amount > 0 is billed its full amount
- * on the first invoice only; later fulfillments skip that line.
+ * Flat Rate rule: SO line with Rate = 0 and Amount > 0 is billed for its FULL
+ * SO quantity and FULL amount on the first invoice (whatever qty was fulfilled).
+ * The SO line is then fully billed, so later transforms simply won't bring it in.
  */
 define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime, log) => {
 
@@ -108,6 +109,8 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
             }
 
             /* ---------- Flat Rate lines from the Sales Order (Rate = 0, Amount > 0) ---------- */
+            // Flat line bills its full remaining SO qty + full amount on the first invoice.
+            // If the SO line is already fully billed, it won't come through the transform.
             const so = record.load({ type: record.Type.SALES_ORDER, id: soId });
             const flatLines = {};
             for (let i = 0; i < so.getLineCount({ sublistId: 'item' }); i++) {
@@ -118,46 +121,16 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                 const rate = +get('rate') || 0;
                 const amount = +get('amount') || 0;
                 if (rate === 0 && amount > 0) {
-                    flatLines[lineId] = { itemId: String(get('item')), amount, alreadyBilled: false };
+                    const soQty = +get('quantity') || 0;
+                    const billedQty = +get('quantitybilled') || 0;
+                    flatLines[lineId] = {
+                        amount,
+                        qty: soQty - billedQty,                     // first invoice = full SO qty
+                        alreadyBilled: billedQty >= soQty
+                    };
                 }
             }
-
-            /* ---------- Was the full flat amount already billed on an existing invoice? ---------- */
-            const flatIds = Object.keys(flatLines);
-            if (flatIds.length) {
-                // Only invoices on this SO that contain a flat-rate item
-                const invoiceIds = [];
-                search.create({
-                    type: search.Type.INVOICE,
-                    filters: [
-                        ['createdfrom', 'anyof', soId], 'AND',
-                        ['mainline', 'is', 'F'], 'AND',
-                        ['voided', 'is', 'F'], 'AND',
-                        ['item', 'anyof', [...new Set(flatIds.map((l) => flatLines[l].itemId))]]
-                    ],
-                    columns: [search.createColumn({ name: 'internalid', summary: search.Summary.GROUP })]
-                }).run().each((r) => {
-                    invoiceIds.push(r.getValue({ name: 'internalid', summary: search.Summary.GROUP }));
-                    return true;
-                });
-
-                // Exact match: same SO line (orderline) + same full amount = already billed
-                for (const id of invoiceIds) {
-                    if (flatIds.every((l) => flatLines[l].alreadyBilled)) break;
-                    const prev = record.load({ type: record.Type.INVOICE, id });
-                    for (let i = 0; i < prev.getLineCount({ sublistId: 'item' }); i++) {
-                        const ol = String(prev.getSublistValue({ sublistId: 'item', fieldId: 'orderline', line: i }));
-                        const f = flatLines[ol];
-                        if (!f || f.alreadyBilled) continue;
-                        const amt = +prev.getSublistValue({ sublistId: 'item', fieldId: 'amount', line: i }) || 0;
-                        if (Math.abs(amt - f.amount) < 0.01) {
-                            f.alreadyBilled = true;
-                            f.billedOn = id;
-                        }
-                    }
-                }
-                log.audit('Flat Rate Lines', flatLines);
-            }
+            if (Object.keys(flatLines).length) log.audit('Flat Rate Lines', flatLines);
 
             /* ---------- Build invoice ---------- */
             const invoice = record.transform({
@@ -178,35 +151,36 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
 
             for (let i = invoice.getLineCount({ sublistId: 'item' }) - 1; i >= 0; i--) {
                 const line = String(invoice.getSublistValue({ sublistId: 'item', fieldId: 'orderline', line: i }));
-                const qty = lines[line];
+                const fulfilledQty = lines[line];
                 const flat = flatLines[line];
 
-                // Not on this IF, or flat-rate line already billed -> drop it
-                if (!qty || (flat && flat.alreadyBilled)) {
-                    if (flat && flat.alreadyBilled) log.audit('Flat Rate Skipped (already billed)', { line });
+                // Not on this IF, or flat-rate line already fully billed -> drop it
+                if (!fulfilledQty || (flat && flat.alreadyBilled)) {
+                    if (flat && flat.alreadyBilled) log.audit('Flat Rate Skipped (already fully billed)', { line });
                     invoice.removeLine({ sublistId: 'item', line: i });
                     continue;
                 }
 
-                invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: qty });
-
-                // First bill of a flat-rate line -> full SO line amount (set AFTER quantity)
                 if (flat) {
+                    // Flat rate: full SO qty, then full SO amount (set AFTER quantity)
+                    invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: flat.qty });
                     invoice.setSublistValue({ sublistId: 'item', fieldId: 'amount', line: i, value: flat.amount });
                     flatToVerify[line] = flat.amount;
-                    log.audit('Flat Rate Billed', { line, qty, amount: flat.amount });
+                    log.audit('Flat Rate Billed (full qty + amount)', { line, fulfilledQty, billedQty: flat.qty, amount: flat.amount });
+                } else {
+                    invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: fulfilledQty });
                 }
 
                 matched++;
                 if (!shipped) {
                     costLines.push({
                         itemId: invoice.getSublistValue({ sublistId: 'item', fieldId: 'item', line: i }),
-                        qty
+                        qty: fulfilledQty
                     });
                 }
             }
 
-            // Lines expected on the invoice = IF lines minus flat lines already billed
+            // Lines expected on the invoice = IF lines minus flat lines already fully billed on the SO
             const expected = Object.keys(lines).filter((l) => !(flatLines[l] && flatLines[l].alreadyBilled)).length;
 
             log.audit('Invoice Ready', { ifNumber, matched, expected, fulfillmentLines: Object.keys(lines).length });

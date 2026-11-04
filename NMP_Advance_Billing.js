@@ -29,8 +29,8 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                 const customerAdvance = shipped && search.lookupFields({
                     type: search.Type.CUSTOMER,
                     id: ff.getValue('entity'),
-                    columns: ['custentity_advance_billing']
-                }).custentity_advance_billing;
+                    columns: ['custentity_auto_invoicing']
+                }).custentity_auto_invoicing;
 
                 if (!shipped || !customerAdvance)
                     return log.audit('Script Stopped', { reason: 'Billing conditions not met', ifNumber, shipped, customerAdvance });

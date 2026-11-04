@@ -29,8 +29,8 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                 const customerAdvance = shipped && search.lookupFields({
                     type: search.Type.CUSTOMER,
                     id: ff.getValue('entity'),
-                    columns: ['custentity_auto_invoicing']
-                }).custentity_auto_invoicing;
+                    columns: ['custentity_advance_billing']
+                }).custentity_advance_billing;
 
                 if (!shipped || !customerAdvance)
                     return log.audit('Script Stopped', { reason: 'Billing conditions not met', ifNumber, shipped, customerAdvance });
@@ -56,38 +56,22 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                 if (!(shipped && jeId))
                     return log.audit('Invoice Already Exists', { ifNumber, invoiceId, shipped });
 
-                const memo = 'Advance Billing Reversal - Invoice ' + invoiceId;
-                const reversed = search.create({
+                /* ---------- Standard NetSuite reversal: set Reversal Date on the COGS JE ---------- */
+                // JE comes from the IF's Related JE field. If a Reversal Date is already set,
+                // NetSuite has already generated (or scheduled) the reversal -> nothing to do.
+                const { reversaldate } = search.lookupFields({
                     type: search.Type.JOURNAL_ENTRY,
-                    filters: [['mainline', 'is', 'T'], 'AND', ['memo', 'is', memo]],
-                    columns: ['internalid']
-                }).run().getRange({ start: 0, end: 1 });
+                    id: jeId,
+                    columns: ['reversaldate']
+                });
+                if (reversaldate) return log.audit('Reversal Already Set', { ifNumber, invoiceId, jeId, reversaldate });
 
-                if (reversed.length) return log.audit('Reversal Already Exists', { ifNumber, invoiceId });
-
-                const original = record.load({ type: record.Type.JOURNAL_ENTRY, id: jeId });
-                const rev = record.create({ type: record.Type.JOURNAL_ENTRY, isDynamic: true });
-
-                for (const f of ['subsidiary', 'currency', 'exchangerate']) {
-                    const v = original.getValue(f);
-                    if (v) rev.setValue({ fieldId: f, value: v });
-                }
-                rev.setValue({ fieldId: 'memo', value: memo });
-
-                for (let i = 0; i < original.getLineCount({ sublistId: 'line' }); i++) {
-                    const get = (fieldId) => original.getSublistValue({ sublistId: 'line', fieldId, line: i });
-                    const debit = +get('debit') || 0;
-                    const credit = +get('credit') || 0;
-
-                    rev.selectNewLine({ sublistId: 'line' });
-                    rev.setCurrentSublistValue({ sublistId: 'line', fieldId: 'account', value: get('account') });
-                    if (debit) rev.setCurrentSublistValue({ sublistId: 'line', fieldId: 'credit', value: debit });
-                    if (credit) rev.setCurrentSublistValue({ sublistId: 'line', fieldId: 'debit', value: credit });
-                    rev.commitLine({ sublistId: 'line' });
-                }
-
-                const reversalId = rev.save();
-                return log.audit('COGS JE Reversed', { ifNumber, invoiceId, jeId, reversalId });
+                record.submitFields({
+                    type: record.Type.JOURNAL_ENTRY,
+                    id: jeId,
+                    values: { reversaldate: new Date() }   // reverse as of the day the IF is shipped
+                });
+                return log.audit('COGS JE Reversal Date Set', { ifNumber, invoiceId, jeId });
             }
 
             /* ---------- Fulfilled quantities by SO line ---------- */

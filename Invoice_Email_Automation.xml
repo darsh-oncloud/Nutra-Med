@@ -24,7 +24,7 @@
       <donotexitworkflow>F</donotexitworkflow>
       <name>State 1</name>
       <positionx>543</positionx>
-      <positiony>143</positiony>
+      <positiony>153</positiony>
       <workflowactions triggertype="BEFORELOAD">
         <addbuttonaction scriptid="workflowaction313">
           <buttondescription></buttondescription>
@@ -49,49 +49,55 @@
         </addbuttonaction>
       </workflowactions>
       <workflowactions triggertype="AFTERSUBMIT">
-        <sendemailaction scriptid="workflowaction316">
-          <attachmentfield></attachmentfield>
-          <attachmentfile></attachmentfile>
-          <attachmentjoinfield></attachmentjoinfield>
-          <attachmenttype>SPECIFIC</attachmenttype>
-          <body></body>
+        <customaction scriptid="workflowaction314">
           <conditionsavedsearch></conditionsavedsearch>
           <contexttypes>ACTION|BANKCONNECTIVITY|BANKSTATEMENTPARSER|BUNDLEINSTALLATION|CLIENT|CSVIMPORT|CUSTOMGLLINES|CUSTOMMASSUPDATE|RECORDACTION|CUSTOMTOOL|DATASETBUILDER|DEBUGGER|EMAILCAPTURE|EVENTSUBSCRIBER|FICONNECTIVITY|FIPARSER|MAPREDUCE|OCRPLUGIN|OFFLINECLIENT|OTHER|PAYMENTPOSTBACK|PAYMENTGATEWAY|PLATFORMEXTENSION|PORTLET|PROMOTIONS|CONSOLRATEADJUSTOR|RESTWEBSERVICES|RESTLET|ADVANCEDREVREC|SCHEDULED|SDFINSTALLATION|SHIPPINGPARTNERS|WEBSERVICES|SUBSCRIBERSCRIPT|SUITELET|TAXCALCULATION|USEREVENT|USERINTERFACE|WORKBOOKBUILDER|WORKFLOW</contexttypes>
           <eventtypes>CREATE</eventtypes>
-          <includeformat></includeformat>
-          <includerecordlink>F</includerecordlink>
-          <includetransaction>F</includetransaction>
           <isinactive>F</isinactive>
-          <recipient>[ACCOUNT_SPECIFIC_VALUE]</recipient>
-          <recipientbccemail></recipientbccemail>
-          <recipientccemail></recipientccemail>
-          <recipientemail></recipientemail>
-          <recipientfield></recipientfield>
-          <recipientjoinfield></recipientjoinfield>
-          <recipienttype>SPECIFIC</recipienttype>
+          <resultfield></resultfield>
           <scheduledelay></scheduledelay>
           <schedulemode>DELAY</schedulemode>
           <schedulerecurrence></schedulerecurrence>
           <scheduletimeofday></scheduletimeofday>
           <scheduletimeunit></scheduletimeunit>
-          <sender>[ACCOUNT_SPECIFIC_VALUE]</sender>
-          <senderfield></senderfield>
-          <senderjoinfield></senderjoinfield>
-          <sendertype>SPECIFIC</sendertype>
-          <subject></subject>
-          <template>[scriptid=custemailtmpl_nmp_sales_invoice_template]</template>
-          <usetemplate>T</usetemplate>
+          <scripttype>[scriptid=customscript_nm_send_invoice_email_autom]</scripttype>
           <initcondition>
-            <formula><![CDATA[isChecked("Customer:Send Invoice Email") = 'T']]></formula>
+            <formula></formula>
             <type>VISUAL_BUILDER</type>
-            <parameters>
-              <parameter>
-                <name>Customer:Send Invoice Email</name>
-                <value>STDBODYCUSTOMER:[scriptid=custentity_send_invoice_email]</value>
-              </parameter>
-            </parameters>
           </initcondition>
-        </sendemailaction>
+          <parametersettings>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_mode]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect></valueselect>
+              <valuetext>AUTO</valuetext>
+            </parametersetting>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_template]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect></valueselect>
+              <valuetext>8</valuetext>
+            </parametersetting>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_sender_employee]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect>[ACCOUNT_SPECIFIC_VALUE]</valueselect>
+              <valuetext></valuetext>
+            </parametersetting>
+          </parametersettings>
+        </customaction>
       </workflowactions>
       <workflowtransitions>
         <workflowtransition scriptid="workflowtransition247">
@@ -119,43 +125,55 @@
       <positionx>543</positionx>
       <positiony>353</positiony>
       <workflowactions triggertype="ONENTRY">
-        <sendemailaction scriptid="workflowaction317">
-          <attachmentfield></attachmentfield>
-          <attachmentfile></attachmentfile>
-          <attachmentjoinfield></attachmentjoinfield>
-          <attachmenttype>SPECIFIC</attachmenttype>
-          <body></body>
+        <customaction scriptid="workflowaction315">
           <conditionsavedsearch></conditionsavedsearch>
           <contexttypes>ACTION|BANKCONNECTIVITY|BANKSTATEMENTPARSER|BUNDLEINSTALLATION|CLIENT|CSVIMPORT|CUSTOMGLLINES|CUSTOMMASSUPDATE|RECORDACTION|CUSTOMTOOL|DATASETBUILDER|DEBUGGER|EMAILCAPTURE|EVENTSUBSCRIBER|FICONNECTIVITY|FIPARSER|MAPREDUCE|OCRPLUGIN|OFFLINECLIENT|OTHER|PAYMENTPOSTBACK|PAYMENTGATEWAY|PLATFORMEXTENSION|PORTLET|PROMOTIONS|CONSOLRATEADJUSTOR|RESTWEBSERVICES|RESTLET|ADVANCEDREVREC|SCHEDULED|SDFINSTALLATION|SHIPPINGPARTNERS|WEBSERVICES|SUBSCRIBERSCRIPT|SUITELET|TAXCALCULATION|USEREVENT|USERINTERFACE|WORKBOOKBUILDER|WORKFLOW</contexttypes>
           <eventtypes></eventtypes>
-          <includeformat></includeformat>
-          <includerecordlink>F</includerecordlink>
-          <includetransaction>F</includetransaction>
           <isinactive>F</isinactive>
-          <recipient>[ACCOUNT_SPECIFIC_VALUE]</recipient>
-          <recipientbccemail></recipientbccemail>
-          <recipientccemail></recipientccemail>
-          <recipientemail></recipientemail>
-          <recipientfield></recipientfield>
-          <recipientjoinfield></recipientjoinfield>
-          <recipienttype>SPECIFIC</recipienttype>
+          <resultfield></resultfield>
           <scheduledelay></scheduledelay>
           <schedulemode>DELAY</schedulemode>
           <schedulerecurrence></schedulerecurrence>
           <scheduletimeofday></scheduletimeofday>
           <scheduletimeunit></scheduletimeunit>
-          <sender>[ACCOUNT_SPECIFIC_VALUE]</sender>
-          <senderfield></senderfield>
-          <senderjoinfield></senderjoinfield>
-          <sendertype>SPECIFIC</sendertype>
-          <subject></subject>
-          <template>[scriptid=custemailtmpl_nmp_sales_invoice_template]</template>
-          <usetemplate>T</usetemplate>
+          <scripttype>[scriptid=customscript_nm_send_invoice_email_autom]</scripttype>
           <initcondition>
             <formula></formula>
             <type>VISUAL_BUILDER</type>
           </initcondition>
-        </sendemailaction>
+          <parametersettings>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_mode]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect></valueselect>
+              <valuetext>MANUAL</valuetext>
+            </parametersetting>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_template]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect></valueselect>
+              <valuetext>8</valuetext>
+            </parametersetting>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_sender_employee]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect>[ACCOUNT_SPECIFIC_VALUE]</valueselect>
+              <valuetext></valuetext>
+            </parametersetting>
+          </parametersettings>
+        </customaction>
       </workflowactions>
     </workflowstate>
   </workflowstates>

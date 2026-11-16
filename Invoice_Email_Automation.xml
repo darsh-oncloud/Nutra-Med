@@ -23,8 +23,8 @@
       <description></description>
       <donotexitworkflow>F</donotexitworkflow>
       <name>State 1</name>
-      <positionx>543</positionx>
-      <positiony>153</positiony>
+      <positionx>643</positionx>
+      <positiony>113</positiony>
       <workflowactions triggertype="BEFORELOAD">
         <addbuttonaction scriptid="workflowaction313">
           <buttondescription></buttondescription>
@@ -48,6 +48,13 @@
           </initcondition>
         </addbuttonaction>
       </workflowactions>
+    </workflowstate>
+    <workflowstate scriptid="workflowstate83">
+      <description></description>
+      <donotexitworkflow>F</donotexitworkflow>
+      <name>State 2</name>
+      <positionx>50</positionx>
+      <positiony>110</positiony>
     </workflowstate>
   </workflowstates>
 </workflow>

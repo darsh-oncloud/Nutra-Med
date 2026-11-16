@@ -37,14 +37,8 @@
           <label>Send Email</label>
           <saverecordfirst>F</saverecordfirst>
           <initcondition>
-            <formula><![CDATA[isChecked("Customer:Send Invoice Email") = 'F']]></formula>
+            <formula></formula>
             <type>VISUAL_BUILDER</type>
-            <parameters>
-              <parameter>
-                <name>Customer:Send Invoice Email</name>
-                <value>STDBODYCUSTOMER:[scriptid=custentity_send_invoice_email]</value>
-              </parameter>
-            </parameters>
           </initcondition>
         </addbuttonaction>
       </workflowactions>
@@ -98,7 +92,7 @@
             </parametersetting>
             <parametersetting>
               <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_test_mode]</targetparameter>
-              <valuechecked></valuechecked>
+              <valuechecked>T</valuechecked>
               <valuedate></valuedate>
               <valuefield></valuefield>
               <valueformula></valueformula>
@@ -113,7 +107,7 @@
               <valuefield></valuefield>
               <valueformula></valueformula>
               <valuejoinfield></valuejoinfield>
-              <valueselect></valueselect>
+              <valueselect>[ACCOUNT_SPECIFIC_VALUE]</valueselect>
               <valuetext></valuetext>
             </parametersetting>
           </parametersettings>
@@ -194,7 +188,7 @@
             </parametersetting>
             <parametersetting>
               <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_test_mode]</targetparameter>
-              <valuechecked></valuechecked>
+              <valuechecked>T</valuechecked>
               <valuedate></valuedate>
               <valuefield></valuefield>
               <valueformula></valueformula>
@@ -209,7 +203,7 @@
               <valuefield></valuefield>
               <valueformula></valueformula>
               <valuejoinfield></valuejoinfield>
-              <valueselect></valueselect>
+              <valueselect>[ACCOUNT_SPECIFIC_VALUE]</valueselect>
               <valuetext></valuetext>
             </parametersetting>
           </parametersettings>

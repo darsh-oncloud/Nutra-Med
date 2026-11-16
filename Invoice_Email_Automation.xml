@@ -96,6 +96,26 @@
               <valueselect>[ACCOUNT_SPECIFIC_VALUE]</valueselect>
               <valuetext></valuetext>
             </parametersetting>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_test_mode]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect></valueselect>
+              <valuetext></valuetext>
+            </parametersetting>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_test_recipient]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect></valueselect>
+              <valuetext></valuetext>
+            </parametersetting>
           </parametersettings>
         </customaction>
       </workflowactions>
@@ -170,6 +190,26 @@
               <valueformula></valueformula>
               <valuejoinfield></valuejoinfield>
               <valueselect>[ACCOUNT_SPECIFIC_VALUE]</valueselect>
+              <valuetext></valuetext>
+            </parametersetting>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_test_mode]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect></valueselect>
+              <valuetext></valuetext>
+            </parametersetting>
+            <parametersetting>
+              <targetparameter>[scriptid=customscript_nm_send_invoice_email_autom.custscript_inv_email_test_recipient]</targetparameter>
+              <valuechecked></valuechecked>
+              <valuedate></valuedate>
+              <valuefield></valuefield>
+              <valueformula></valueformula>
+              <valuejoinfield></valuejoinfield>
+              <valueselect></valueselect>
               <valuetext></valuetext>
             </parametersetting>
           </parametersettings>

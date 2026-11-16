@@ -15,6 +15,8 @@
  *   custscript_inv_email_mode      Free-Form Text   AUTO or MANUAL (set per workflow action)
  *   custscript_inv_email_template  Integer Number   Internal ID of the Email Template
  *   custscript_inv_email_sender    List/Record (Employee)  Employee shown as the sender
+ *   custscript_inv_email_test_mode      Check Box       Test mode on/off
+ *   custscript_inv_email_test_recipient Free-Form Text  Test email address (blank = dry run, log only)
  *
  * Custom fields used:
  *   custentity_auto_send_invoice   Customer checkbox
@@ -34,7 +36,9 @@ define(['N/record', 'N/search', 'N/render', 'N/email', 'N/runtime', 'N/format'],
         const PARAM = {
             MODE: 'custscript_inv_email_mode',
             TEMPLATE: 'custscript_inv_email_template',
-            SENDER: 'custscript_inv_email_sender'
+            SENDER: 'custscript_inv_email_sender',
+            TEST_MODE: 'custscript_inv_email_test_mode',        // Check Box
+            TEST_RECIPIENT: 'custscript_inv_email_test_recipient' // Free-Form Text (email)
         };
 
         const FIELD = {
@@ -134,18 +138,50 @@ define(['N/record', 'N/search', 'N/render', 'N/email', 'N/runtime', 'N/format'],
                 });
                 pdf.name = `Invoice_${tranId}.pdf`;
 
-                // ---------- Send ----------
-                email.send({
-                    author: senderId,
-                    recipients: recipients,
-                    subject: merged.subject,
-                    body: merged.body,
-                    attachments: [pdf],
-                    relatedRecords: {
-                        transactionId: Number(invoiceId), // shows under Communication tab on the invoice
-                        entityId: customerId
+                // ---------- TEST MODE ----------
+                // Test Mode checked + Test Recipient blank  -> DRY RUN: nothing is sent, everything is logged
+                // Test Mode checked + Test Recipient filled -> email goes ONLY to the test address
+                const testMode = isTrue(script.getParameter({ name: PARAM.TEST_MODE }));
+                const testRecipient = splitEmails(script.getParameter({ name: PARAM.TEST_RECIPIENT }));
+
+                if (testMode) {
+                    log.audit(`${title} [TEST] Invoice ${tranId}`,
+                        `Mode: ${mode} | Real recipients: ${recipients.join(', ')} | Sender ID: ${senderId} | ` +
+                        `Template ID: ${templateId} | PDF: ${pdf.name} (${pdf.size} bytes)`);
+                    log.audit(`${title} [TEST] Subject`, merged.subject);
+                    log.audit(`${title} [TEST] Body (HTML)`, String(merged.body || '').substring(0, 3900));
+
+                    if (!testRecipient.length) {
+                        log.audit(title, `Invoice ${tranId}: DRY RUN - email NOT sent, sent flag NOT set`);
+                        return 'TEST: dry run, not sent';
                     }
-                });
+
+                    email.send({
+                        author: senderId,
+                        recipients: testRecipient,
+                        subject: `[TEST] ${merged.subject}`,
+                        body: `<p style="background:#fff3cd;padding:8px;border:1px solid #e0c36c">` +
+                            `<b>TEST EMAIL</b> - mode: ${mode}. In live mode this would go to: ${recipients.join(', ')}</p>` +
+                            merged.body,
+                        attachments: [pdf],
+                        relatedRecords: { transactionId: Number(invoiceId) }
+                    });
+                    // Flags are set below so you can also test the "no duplicate" scenario.
+                    // Untick "Invoice Email Sent" on the invoice to test again.
+                } else {
+                    // ---------- LIVE send ----------
+                    email.send({
+                        author: senderId,
+                        recipients: recipients,
+                        subject: merged.subject,
+                        body: merged.body,
+                        attachments: [pdf],
+                        relatedRecords: {
+                            transactionId: Number(invoiceId), // shows under Communication tab on the invoice
+                            entityId: customerId
+                        }
+                    });
+                }
 
                 // ---------- Mark as sent (only after successful send) ----------
                 record.submitFields({
@@ -158,8 +194,9 @@ define(['N/record', 'N/search', 'N/render', 'N/email', 'N/runtime', 'N/format'],
                     options: { enableSourcing: false, ignoreMandatoryFields: true }
                 });
 
-                log.audit(title, `Invoice ${tranId}: SENT (${mode}) to ${recipients.join(', ')}`);
-                return 'SENT';
+                const sentTo = testMode ? testRecipient.join(', ') + ' (TEST)' : recipients.join(', ');
+                log.audit(title, `Invoice ${tranId}: SENT (${mode}) to ${sentTo}`);
+                return testMode ? 'TEST: sent to test address' : 'SENT';
 
             } catch (e) {
                 // Never throw: invoice creation must stay successful even if the email fails.

@@ -6,8 +6,99 @@
  * Flat Rate rule: SO line with Rate = 0 and Amount > 0 is billed for its FULL
  * SO quantity and FULL amount on the first invoice (whatever qty was fulfilled).
  * The SO line is then fully billed, so later transforms simply won't bring it in.
+ *
+ * + Automated invoice email: after the invoice is created, emails it to the customer
+ *   if the Customer "Send Invoice Email" checkbox is checked and total > 0.
  */
-define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime, log) => {
+define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
+    (record, search, runtime, log, render, email) => {
+
+    /* ===================== INVOICE EMAIL SETTINGS ===================== */
+    const EMAIL_TEMPLATE_ID = 8;                 // Email Template internal ID
+    const EMAIL_SENDER_ID = 8664;                // AR employee (From)
+    const EMAIL_TEST_RECIPIENT = '';             // put your email here to test; '' = LIVE (customer)
+    const CUST_SEND_EMAIL = 'custentity_send_invoice_email';
+    const CUST_CC_FIELD = 'custentity_additional_external_inv_email';
+    const INV_EMAIL_SENT = 'custbody_email_sent';
+    /* ================================================================== */
+
+    /**
+     * Emails the invoice if the customer is enrolled. NEVER throws, so it can
+     * never break invoice / JE creation.
+     */
+    const sendInvoiceEmail = (invoiceId) => {
+        try {
+            const splitEmails = (str) => {
+                const seen = {};
+                return String(str || '').split(/[;,\s]+/).map(s => s.trim())
+                    .filter(s => s && s.indexOf('@') > 0)
+                    .filter(s => (seen[s.toLowerCase()] ? false : (seen[s.toLowerCase()] = true)));
+            };
+            const isTrue = (v) => v === true || v === 'T';
+
+            const inv = search.lookupFields({
+                type: search.Type.INVOICE, id: invoiceId,
+                columns: ['tranid', 'entity', 'email', 'total', INV_EMAIL_SENT]
+            });
+            const tranId = inv.tranid || String(invoiceId);
+            const customerId = Number(inv.entity && inv.entity[0] ? inv.entity[0].value : 0);
+            const total = parseFloat(inv.total) || 0;
+
+            const cust = search.lookupFields({
+                type: search.Type.CUSTOMER, id: customerId,
+                columns: ['email', CUST_SEND_EMAIL, CUST_CC_FIELD]
+            });
+
+            if (!isTrue(cust[CUST_SEND_EMAIL])) return log.audit('Invoice Email Skipped', { tranId, reason: 'customer checkbox not checked' });
+            if (total <= 0) return log.audit('Invoice Email Skipped', { tranId, reason: '$0 invoice', total });
+            if (isTrue(inv[INV_EMAIL_SENT])) return log.audit('Invoice Email Skipped', { tranId, reason: 'already sent' });
+
+            let to = splitEmails(cust.email);
+            if (!to.length) to = splitEmails(inv.email);
+            if (!to.length) return log.error('Invoice Email Skipped', { tranId, reason: 'customer has no email address' });
+            to = to.slice(0, 10);
+            const toLower = to.map(e => e.toLowerCase());
+            const cc = splitEmails(cust[CUST_CC_FIELD]).filter(e => toLower.indexOf(e.toLowerCase()) < 0).slice(0, 10);
+
+            const merged = render.mergeEmail({
+                templateId: EMAIL_TEMPLATE_ID,
+                entity: { type: 'customer', id: customerId },
+                transactionId: Number(invoiceId)
+            });
+            const pdf = render.transaction({ entityId: Number(invoiceId), printMode: render.PrintMode.PDF });
+            pdf.name = 'Invoice_' + tranId + '.pdf';
+
+            const opts = {
+                author: EMAIL_SENDER_ID,
+                recipients: to,
+                subject: merged.subject,
+                body: merged.body,
+                attachments: [pdf],
+                relatedRecords: { transactionId: Number(invoiceId), entityId: customerId }
+            };
+            if (cc.length) opts.cc = cc;
+
+            if (EMAIL_TEST_RECIPIENT) {
+                opts.recipients = [EMAIL_TEST_RECIPIENT];
+                delete opts.cc;
+                opts.subject = '[TEST] ' + opts.subject;
+                opts.body = '<p style="background:#fff3cd;padding:8px">TEST - Live TO: ' + to.join(', ') +
+                    ' | Live CC: ' + (cc.join(', ') || '(none)') + '</p>' + opts.body;
+            }
+
+            email.send(opts);
+
+            record.submitFields({
+                type: record.Type.INVOICE, id: invoiceId,
+                values: { [INV_EMAIL_SENT]: true },
+                options: { enableSourcing: false, ignoreMandatoryFields: true }
+            });
+
+            log.audit('Invoice Email Sent', { tranId, to: opts.recipients, cc: opts.cc || [] });
+        } catch (err) {
+            log.error('Invoice Email Failed', { invoiceId, name: err.name, message: err.message });
+        }
+    };
 
     const afterSubmit = (context) => {
         try {
@@ -57,8 +148,6 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                     return log.audit('Invoice Already Exists', { ifNumber, invoiceId, shipped });
 
                 /* ---------- Standard NetSuite reversal: set Reversal Date on the COGS JE ---------- */
-                // JE comes from the IF's Related JE field. If a Reversal Date is already set,
-                // NetSuite has already generated (or scheduled) the reversal -> nothing to do.
                 const { reversaldate } = search.lookupFields({
                     type: search.Type.JOURNAL_ENTRY,
                     id: jeId,
@@ -69,7 +158,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                 record.submitFields({
                     type: record.Type.JOURNAL_ENTRY,
                     id: jeId,
-                    values: { reversaldate: new Date() }   // reverse as of the day the IF is shipped
+                    values: { reversaldate: new Date() }
                 });
                 return log.audit('COGS JE Reversal Date Set', { ifNumber, invoiceId, jeId });
             }
@@ -93,14 +182,12 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
             }
 
             /* ---------- Flat Rate lines from the Sales Order (Rate = 0, Amount > 0) ---------- */
-            // Flat line bills its full remaining SO qty + full amount on the first invoice.
-            // If the SO line is already fully billed, it won't come through the transform.
             const so = record.load({ type: record.Type.SALES_ORDER, id: soId });
             const flatLines = {};
             for (let i = 0; i < so.getLineCount({ sublistId: 'item' }); i++) {
                 const get = (fieldId) => so.getSublistValue({ sublistId: 'item', fieldId, line: i });
                 const lineId = String(get('line'));
-                if (!lines[lineId]) continue;                       // only lines on this IF
+                if (!lines[lineId]) continue;
 
                 const rate = +get('rate') || 0;
                 const amount = +get('amount') || 0;
@@ -109,16 +196,13 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                     const billedQty = +get('quantitybilled') || 0;
                     flatLines[lineId] = {
                         amount,
-                        qty: soQty - billedQty,                     // first invoice = full SO qty
+                        qty: soQty - billedQty,
                         alreadyBilled: billedQty >= soQty
                     };
                 }
             }
             if (Object.keys(flatLines).length) log.audit('Flat Rate Lines', flatLines);
 
-            // Lines expected on the invoice = IF lines minus flat lines already fully billed.
-            // If nothing is left, stop BEFORE the transform: NetSuite throws
-            // INVALID_INITIALIZE_REF when the SO has nothing left to bill.
             const expected = Object.keys(lines).filter((l) => !(flatLines[l] && flatLines[l].alreadyBilled)).length;
             if (!expected) {
                 return log.audit('Script Stopped', { reason: 'Nothing to invoice - flat rate line(s) already fully billed', ifNumber, soId });
@@ -139,14 +223,13 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
 
             let matched = 0;
             const costLines = [];
-            const flatToVerify = {};   // orderline -> expected amount
+            const flatToVerify = {};
 
             for (let i = invoice.getLineCount({ sublistId: 'item' }) - 1; i >= 0; i--) {
                 const line = String(invoice.getSublistValue({ sublistId: 'item', fieldId: 'orderline', line: i }));
                 const fulfilledQty = lines[line];
                 const flat = flatLines[line];
 
-                // Not on this IF, or flat-rate line already fully billed -> drop it
                 if (!fulfilledQty || (flat && flat.alreadyBilled)) {
                     if (flat && flat.alreadyBilled) log.audit('Flat Rate Skipped (already fully billed)', { line });
                     invoice.removeLine({ sublistId: 'item', line: i });
@@ -154,7 +237,6 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                 }
 
                 if (flat) {
-                    // Flat rate: full SO qty, then full SO amount (set AFTER quantity)
                     invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: flat.qty });
                     invoice.setSublistValue({ sublistId: 'item', fieldId: 'amount', line: i, value: flat.amount });
                     flatToVerify[line] = flat.amount;
@@ -177,7 +259,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
             if (!matched) return log.audit('Script Stopped', 'Nothing to invoice (flat rate already billed or no lines matched)');
             if (matched !== expected) throw Error('Some IF lines are missing from invoice transform');
 
-            /* ---------- Advance billing COGS (one item search instead of per-line lookups) ---------- */
+            /* ---------- Advance billing COGS ---------- */
             let totalCost = 0;
             if (!shipped) {
                 const costs = {};
@@ -219,6 +301,9 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log'], (record, search, runtime,
                     }
                 }
             }
+
+            /* ---------- NEW: automated invoice email (final amounts are saved now) ---------- */
+            sendInvoiceEmail(invoiceId);
 
             if (shipped) return log.audit('Normal Invoice Created', { ifNumber, invoiceId });
 

@@ -100,6 +100,102 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
         }
     };
 
+    /* ===================== NEW: IF DETAILS ON INVOICE (Ship To, Lot, Expiry) ===================== */
+    const ADDRESS_FIELDS = ['country', 'attention', 'addressee', 'addrphone', 'addr1', 'addr2', 'addr3', 'city', 'state', 'zip'];
+
+    // Ship To address from the IF (null if none)
+    const getIfShipAddress = (ff) => {
+        try {
+            const sub = ff.getSubrecord({ fieldId: 'shippingaddress' });
+            const a = {};
+            ADDRESS_FIELDS.forEach((f) => { a[f] = sub.getValue({ fieldId: f }) || ''; });
+            return (a.addr1 || a.city) ? a : null;
+        } catch (e) {
+            log.error('IF Ship Address Read Failed', e.message);
+            return null;
+        }
+    };
+
+    // Copy IF Ship To onto the invoice (country first - it changes the address form)
+    const setInvoiceShipAddress = (invoice, a) => {
+        if (!a) return;
+        try {
+            const sub = invoice.getSubrecord({ fieldId: 'shippingaddress' });
+            sub.setValue({ fieldId: 'country', value: a.country });
+            ADDRESS_FIELDS.slice(1).forEach((f) => sub.setValue({ fieldId: f, value: a[f] }));
+            log.audit('Ship To Copied From IF', a);
+        } catch (e) {
+            log.error('Ship To Copy Failed (invoice keeps SO address)', e.message);
+        }
+    };
+
+    // Lots on the IF grouped by SO line: { orderline: [{ numberId, number, qty, expiry }] }
+    const getIfLots = (ff) => {
+        const byLine = {};
+        const ids = {};
+        for (let i = 0; i < ff.getLineCount({ sublistId: 'item' }); i++) {
+            const orderline = String(ff.getSublistValue({ sublistId: 'item', fieldId: 'orderline', line: i }));
+            const qty = +ff.getSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i }) || 0;
+            if (!orderline || qty <= 0) continue;
+            if (!ff.hasSublistSubrecord({ sublistId: 'item', fieldId: 'inventorydetail', line: i })) continue;
+
+            const detail = ff.getSublistSubrecord({ sublistId: 'item', fieldId: 'inventorydetail', line: i });
+            for (let j = 0; j < detail.getLineCount({ sublistId: 'inventoryassignment' }); j++) {
+                const numberId = detail.getSublistValue({ sublistId: 'inventoryassignment', fieldId: 'issueinventorynumber', line: j });
+                const lotQty = +detail.getSublistValue({ sublistId: 'inventoryassignment', fieldId: 'quantity', line: j }) || 0;
+                if (!numberId || lotQty <= 0) continue;
+
+                const list = byLine[orderline] || (byLine[orderline] = []);
+                const same = list.find((l) => l.numberId === String(numberId));
+                if (same) same.qty += lotQty;
+                else list.push({ numberId: String(numberId), qty: lotQty, number: '', expiry: '' });
+                ids[numberId] = true;
+            }
+        }
+
+        // Lot number text + expiry date (one search)
+        const idList = Object.keys(ids);
+        if (idList.length) {
+            const info = {};
+            search.create({
+                type: search.Type.INVENTORY_NUMBER,
+                filters: [['internalid', 'anyof', idList]],
+                columns: ['inventorynumber', 'expirationdate']
+            }).run().each((r) => {
+                info[r.id] = { number: r.getValue('inventorynumber'), expiry: r.getValue('expirationdate') };
+                return true;
+            });
+            Object.keys(byLine).forEach((ol) => byLine[ol].forEach((l) => {
+                if (info[l.numberId]) { l.number = info[l.numberId].number; l.expiry = info[l.numberId].expiry; }
+            }));
+        }
+        return byLine;
+    };
+
+    // Replace invoice line Inventory Detail with the IF lots (expiry comes with the lot).
+    // Only if the line already has Inventory Detail and lot qty total = invoice line qty.
+    const setInvoiceLineLots = (invoice, i, lots, lineQty, orderline) => {
+        if (!invoice.hasSublistSubrecord({ sublistId: 'item', fieldId: 'inventorydetail', line: i })) {
+            return log.audit('Invoice Line Has No Inventory Detail (skipped)', { orderline });
+        }
+        const lotTotal = lots.reduce((s, l) => s + l.qty, 0);
+        if (Math.abs(lotTotal - lineQty) > 0.00001) {
+            return log.audit('Inventory Detail Skipped - lot qty differs from invoice qty', { orderline, lineQty, lotTotal });
+        }
+
+        const detail = invoice.getSublistSubrecord({ sublistId: 'item', fieldId: 'inventorydetail', line: i });
+        for (let j = detail.getLineCount({ sublistId: 'inventoryassignment' }) - 1; j >= 0; j--) {
+            detail.removeLine({ sublistId: 'inventoryassignment', line: j });
+        }
+        lots.forEach((l, j) => {
+            detail.insertLine({ sublistId: 'inventoryassignment', line: j });
+            detail.setSublistValue({ sublistId: 'inventoryassignment', fieldId: 'issueinventorynumber', line: j, value: l.numberId });
+            detail.setSublistValue({ sublistId: 'inventoryassignment', fieldId: 'quantity', line: j, value: l.qty });
+        });
+        log.audit('Lots Copied From IF', { orderline, lots });
+    };
+    /* ============================================================================================= */
+
     const afterSubmit = (context) => {
         try {
             const T = context.UserEventType;
@@ -172,6 +268,11 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
             }
             if (!Object.keys(lines).length) return log.audit('Script Stopped', 'No fulfillment quantities found');
 
+            /* ---------- NEW: read Ship To + lots from the IF ---------- */
+            const ifShipAddress = getIfShipAddress(ff);
+            const ifLots = getIfLots(ff);
+            if (Object.keys(ifLots).length) log.audit('IF Lots', ifLots);
+
             /* ---------- Check JE parameters BEFORE saving anything (advance billing) ---------- */
             let debitAccount, creditAccount;
             if (!shipped) {
@@ -221,6 +322,9 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
                 value: (shipped ? 'Normal Shipping' : 'Advance Billing') + ' - IF ' + ifNumber + ' (ID ' + ff.id + ')'
             });
 
+            /* ---------- NEW: Ship To from the IF ---------- */
+            setInvoiceShipAddress(invoice, ifShipAddress);
+
             let matched = 0;
             const costLines = [];
             const flatToVerify = {};
@@ -244,6 +348,9 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
                 } else {
                     invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: fulfilledQty });
                 }
+
+                /* ---------- NEW: lots + expiry from the IF ---------- */
+                if (ifLots[line]) setInvoiceLineLots(invoice, i, ifLots[line], flat ? flat.qty : fulfilledQty, line);
 
                 matched++;
                 if (!shipped) {

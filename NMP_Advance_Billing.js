@@ -415,11 +415,13 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
             if (shipped) return log.audit('Normal Invoice Created', { ifNumber, invoiceId });
 
             /* ---------- Advance billing COGS JE ---------- */
-            const memo = 'Advance Billing COGS - Invoice ' + invoiceId;
+            const invTranId = search.lookupFields({ type: search.Type.INVOICE, id: invoiceId, columns: ['tranid'] }).tranid;
+            const memo = 'Advance Billing COGS - Invoice ' + invTranId + ' - IF ' + ifNumber;
             const je = record.create({ type: record.Type.JOURNAL_ENTRY, isDynamic: true });
             const subsidiary = invoice.getValue('subsidiary');
             if (subsidiary) je.setValue({ fieldId: 'subsidiary', value: subsidiary });
             je.setValue({ fieldId: 'memo', value: memo });
+            je.setValue({ fieldId: 'custbody_related_if', value: ff.id }); 
 
             for (const entry of [
                 { account: debitAccount, field: 'debit' },

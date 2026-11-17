@@ -31,20 +31,14 @@
           <checkconditionbeforeexecution>T</checkconditionbeforeexecution>
           <conditionsavedsearch></conditionsavedsearch>
           <contexttypes>ACTION|BANKCONNECTIVITY|BANKSTATEMENTPARSER|BUNDLEINSTALLATION|CLIENT|CSVIMPORT|CUSTOMGLLINES|CUSTOMMASSUPDATE|RECORDACTION|CUSTOMTOOL|DATASETBUILDER|DEBUGGER|EMAILCAPTURE|EVENTSUBSCRIBER|FICONNECTIVITY|FIPARSER|MAPREDUCE|OCRPLUGIN|OFFLINECLIENT|OTHER|PAYMENTPOSTBACK|PAYMENTGATEWAY|PLATFORMEXTENSION|PORTLET|PROMOTIONS|CONSOLRATEADJUSTOR|RESTWEBSERVICES|RESTLET|ADVANCEDREVREC|SCHEDULED|SDFINSTALLATION|SHIPPINGPARTNERS|WEBSERVICES|SUBSCRIBERSCRIPT|SUITELET|TAXCALCULATION|USEREVENT|USERINTERFACE|WORKBOOKBUILDER|WORKFLOW</contexttypes>
-          <eventtypes>CREATE|VIEW</eventtypes>
+          <eventtypes>VIEW</eventtypes>
           <exposetorecordactionapi>F</exposetorecordactionapi>
           <isinactive>F</isinactive>
           <label>Send Email</label>
           <saverecordfirst>F</saverecordfirst>
           <initcondition>
-            <formula><![CDATA[isChecked("Email Sent") = 'F']]></formula>
+            <formula></formula>
             <type>VISUAL_BUILDER</type>
-            <parameters>
-              <parameter>
-                <name>Email Sent</name>
-                <value>[scriptid=custbody_email_sent]</value>
-              </parameter>
-            </parameters>
           </initcondition>
         </addbuttonaction>
       </workflowactions>

@@ -143,12 +143,13 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
             for (let j = 0; j < detail.getLineCount({ sublistId: 'inventoryassignment' }); j++) {
                 const numberId = detail.getSublistValue({ sublistId: 'inventoryassignment', fieldId: 'issueinventorynumber', line: j });
                 const lotQty = +detail.getSublistValue({ sublistId: 'inventoryassignment', fieldId: 'quantity', line: j }) || 0;
+                const binId = String(detail.getSublistValue({ sublistId: 'inventoryassignment', fieldId: 'binnumber', line: j }) || '');
                 if (!numberId || lotQty <= 0) continue;
 
                 const list = byLine[orderline] || (byLine[orderline] = []);
-                const same = list.find((l) => l.numberId === String(numberId));
+                const same = list.find((l) => l.numberId === String(numberId) && l.binId === binId);
                 if (same) same.qty += lotQty;
-                else list.push({ numberId: String(numberId), qty: lotQty, number: '', expiry: '' });
+                else list.push({ numberId: String(numberId), binId, qty: lotQty, number: '', expiry: '' });
                 ids[numberId] = true;
             }
         }
@@ -191,6 +192,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
             detail.insertLine({ sublistId: 'inventoryassignment', line: j });
             detail.setSublistValue({ sublistId: 'inventoryassignment', fieldId: 'issueinventorynumber', line: j, value: l.numberId });
             detail.setSublistValue({ sublistId: 'inventoryassignment', fieldId: 'quantity', line: j, value: l.qty });
+            if (l.binId) detail.setSublistValue({ sublistId: 'inventoryassignment', fieldId: 'binnumber', line: j, value: l.binId });
         });
         log.audit('Lots Copied From IF', { orderline, lots });
     };

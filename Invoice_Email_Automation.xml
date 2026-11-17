@@ -37,8 +37,14 @@
           <label>Send Email</label>
           <saverecordfirst>F</saverecordfirst>
           <initcondition>
-            <formula></formula>
+            <formula><![CDATA[isChecked("Email Sent") = 'F']]></formula>
             <type>VISUAL_BUILDER</type>
+            <parameters>
+              <parameter>
+                <name>Email Sent</name>
+                <value>[scriptid=custbody_email_sent]</value>
+              </parameter>
+            </parameters>
           </initcondition>
         </addbuttonaction>
       </workflowactions>

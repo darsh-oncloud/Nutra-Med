@@ -7,98 +7,13 @@
  * SO quantity and FULL amount on the first invoice (whatever qty was fulfilled).
  * The SO line is then fully billed, so later transforms simply won't bring it in.
  *
- * + Automated invoice email: after the invoice is created, emails it to the customer
- *   if the Customer "Send Invoice Email" checkbox is checked and total > 0.
+ * + Automated invoice email: after the invoice is created, starts the
+ *   "Invoice Email Automation" workflow, which sends the email.
  */
-define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
-    (record, search, runtime, log, render, email) => {
+define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/workflow'],
+    (record, search, runtime, log, workflow) => {
 
-    /* ===================== INVOICE EMAIL SETTINGS ===================== */
-    const EMAIL_TEMPLATE_ID = 8;                 // Email Template internal ID
-    const EMAIL_SENDER_ID = 8664;                // AR employee (From)
-    const EMAIL_TEST_RECIPIENT = '';             // put your email here to test; '' = LIVE (customer)
-    const CUST_SEND_EMAIL = 'custentity_send_invoice_email';
-    const CUST_CC_FIELD = 'custentity_additional_external_inv_email';
-    const INV_EMAIL_SENT = 'custbody_email_sent';
-    /* ================================================================== */
-
-    /**
-     * Emails the invoice if the customer is enrolled. NEVER throws, so it can
-     * never break invoice / JE creation.
-     */
-    const sendInvoiceEmail = (invoiceId) => {
-        try {
-            const splitEmails = (str) => {
-                const seen = {};
-                return String(str || '').split(/[;,\s]+/).map(s => s.trim())
-                    .filter(s => s && s.indexOf('@') > 0)
-                    .filter(s => (seen[s.toLowerCase()] ? false : (seen[s.toLowerCase()] = true)));
-            };
-            const isTrue = (v) => v === true || v === 'T';
-
-            const inv = search.lookupFields({
-                type: search.Type.INVOICE, id: invoiceId,
-                columns: ['tranid', 'entity', 'email', 'total', INV_EMAIL_SENT]
-            });
-            const tranId = inv.tranid || String(invoiceId);
-            const customerId = Number(inv.entity && inv.entity[0] ? inv.entity[0].value : 0);
-            const total = parseFloat(inv.total) || 0;
-
-            const cust = search.lookupFields({
-                type: search.Type.CUSTOMER, id: customerId,
-                columns: ['email', CUST_SEND_EMAIL, CUST_CC_FIELD]
-            });
-
-            if (!isTrue(cust[CUST_SEND_EMAIL])) return log.audit('Invoice Email Skipped', { tranId, reason: 'customer checkbox not checked' });
-            if (total <= 0) return log.audit('Invoice Email Skipped', { tranId, reason: '$0 invoice', total });
-            if (isTrue(inv[INV_EMAIL_SENT])) return log.audit('Invoice Email Skipped', { tranId, reason: 'already sent' });
-
-            let to = splitEmails(cust.email);
-            if (!to.length) to = splitEmails(inv.email);
-            if (!to.length) return log.error('Invoice Email Skipped', { tranId, reason: 'customer has no email address' });
-            to = to.slice(0, 10);
-            const toLower = to.map(e => e.toLowerCase());
-            const cc = splitEmails(cust[CUST_CC_FIELD]).filter(e => toLower.indexOf(e.toLowerCase()) < 0).slice(0, 10);
-
-            const merged = render.mergeEmail({
-                templateId: EMAIL_TEMPLATE_ID,
-                entity: { type: 'customer', id: customerId },
-                transactionId: Number(invoiceId)
-            });
-            const pdf = render.transaction({ entityId: Number(invoiceId), printMode: render.PrintMode.PDF });
-            pdf.name = 'Invoice_' + tranId + '.pdf';
-
-            const opts = {
-                author: EMAIL_SENDER_ID,
-                recipients: to,
-                subject: merged.subject,
-                body: merged.body,
-                attachments: [pdf],
-                relatedRecords: { transactionId: Number(invoiceId), entityId: customerId }
-            };
-            if (cc.length) opts.cc = cc;
-
-            if (EMAIL_TEST_RECIPIENT) {
-                opts.recipients = [EMAIL_TEST_RECIPIENT];
-                delete opts.cc;
-                opts.subject = '[TEST] ' + opts.subject;
-                opts.body = '<p style="background:#fff3cd;padding:8px">TEST - Live TO: ' + to.join(', ') +
-                    ' | Live CC: ' + (cc.join(', ') || '(none)') + '</p>' + opts.body;
-            }
-
-            email.send(opts);
-
-            record.submitFields({
-                type: record.Type.INVOICE, id: invoiceId,
-                values: { [INV_EMAIL_SENT]: true },
-                options: { enableSourcing: false, ignoreMandatoryFields: true }
-            });
-
-            log.audit('Invoice Email Sent', { tranId, to: opts.recipients, cc: opts.cc || [] });
-        } catch (err) {
-            log.error('Invoice Email Failed', { invoiceId, name: err.name, message: err.message });
-        }
-    };
+    const INVOICE_EMAIL_WORKFLOW = 'customworkflow_invoice_email_automation';
 
     /* ===================== NEW: IF DETAILS ON INVOICE (Ship To, Lot, Expiry) ===================== */
     const ADDRESS_FIELDS = ['country', 'attention', 'addressee', 'addrphone', 'addr1', 'addr2', 'addr3', 'city', 'state', 'zip'];
@@ -414,8 +329,17 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
                 }
             }
 
-            /* ---------- NEW: automated invoice email (final amounts are saved now) ---------- */
-            sendInvoiceEmail(invoiceId);
+            /* ---------- NEW: start invoice email workflow (never breaks invoicing) ---------- */
+            try {
+                workflow.initiate({
+                    recordType: record.Type.INVOICE,
+                    recordId: invoiceId,
+                    workflowId: INVOICE_EMAIL_WORKFLOW
+                });
+                log.audit('Invoice Email Workflow Started', { ifNumber, invoiceId });
+            } catch (err) {
+                log.error('Invoice Email Workflow Failed', { ifNumber, invoiceId, message: err.message });
+            }
 
             if (shipped) return log.audit('Normal Invoice Created', { ifNumber, invoiceId });
 

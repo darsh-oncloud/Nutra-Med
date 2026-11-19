@@ -25,6 +25,35 @@
       <name>State 1</name>
       <positionx>643</positionx>
       <positiony>113</positiony>
+      <workflowactions triggertype="ONENTRY">
+        <customaction scriptid="workflowaction315">
+          <conditionsavedsearch></conditionsavedsearch>
+          <contexttypes>ACTION|BANKCONNECTIVITY|BANKSTATEMENTPARSER|BUNDLEINSTALLATION|CLIENT|CSVIMPORT|CUSTOMGLLINES|CUSTOMMASSUPDATE|RECORDACTION|CUSTOMTOOL|DATASETBUILDER|DEBUGGER|EMAILCAPTURE|EVENTSUBSCRIBER|FICONNECTIVITY|FIPARSER|MAPREDUCE|OCRPLUGIN|OFFLINECLIENT|OTHER|PAYMENTPOSTBACK|PAYMENTGATEWAY|PLATFORMEXTENSION|PORTLET|PROMOTIONS|CONSOLRATEADJUSTOR|RESTWEBSERVICES|RESTLET|ADVANCEDREVREC|SCHEDULED|SDFINSTALLATION|SHIPPINGPARTNERS|WEBSERVICES|SUBSCRIBERSCRIPT|SUITELET|TAXCALCULATION|USEREVENT|USERINTERFACE|WORKBOOKBUILDER|WORKFLOW</contexttypes>
+          <eventtypes></eventtypes>
+          <isinactive>F</isinactive>
+          <resultfield></resultfield>
+          <scheduledelay></scheduledelay>
+          <schedulemode>DELAY</schedulemode>
+          <schedulerecurrence></schedulerecurrence>
+          <scheduletimeofday></scheduletimeofday>
+          <scheduletimeunit></scheduletimeunit>
+          <scripttype>[scriptid=customscript_nm_send_invoice_email_autom]</scripttype>
+          <initcondition>
+            <formula><![CDATA[isChecked("Customer:Send Invoice Email") = 'T' AND isChecked("Email Sent") = 'F']]></formula>
+            <type>VISUAL_BUILDER</type>
+            <parameters>
+              <parameter>
+                <name>Customer:Send Invoice Email</name>
+                <value>STDBODYCUSTOMER:[scriptid=custentity_send_invoice_email]</value>
+              </parameter>
+              <parameter>
+                <name>Email Sent</name>
+                <value>[scriptid=custbody_email_sent]</value>
+              </parameter>
+            </parameters>
+          </initcondition>
+        </customaction>
+      </workflowactions>
       <workflowactions triggertype="BEFORELOAD">
         <addbuttonaction scriptid="workflowaction313">
           <buttondescription></buttondescription>
@@ -47,31 +76,6 @@
             </parameters>
           </initcondition>
         </addbuttonaction>
-      </workflowactions>
-      <workflowactions triggertype="AFTERSUBMIT">
-        <customaction scriptid="workflowaction315">
-          <conditionsavedsearch></conditionsavedsearch>
-          <contexttypes>ACTION|BANKCONNECTIVITY|BANKSTATEMENTPARSER|BUNDLEINSTALLATION|CLIENT|CSVIMPORT|CUSTOMGLLINES|CUSTOMMASSUPDATE|RECORDACTION|CUSTOMTOOL|DATASETBUILDER|DEBUGGER|EMAILCAPTURE|EVENTSUBSCRIBER|FICONNECTIVITY|FIPARSER|MAPREDUCE|OCRPLUGIN|OFFLINECLIENT|OTHER|PAYMENTPOSTBACK|PAYMENTGATEWAY|PLATFORMEXTENSION|PORTLET|PROMOTIONS|CONSOLRATEADJUSTOR|RESTWEBSERVICES|RESTLET|ADVANCEDREVREC|SCHEDULED|SDFINSTALLATION|SHIPPINGPARTNERS|WEBSERVICES|SUBSCRIBERSCRIPT|SUITELET|TAXCALCULATION|USEREVENT|USERINTERFACE|WORKBOOKBUILDER|WORKFLOW</contexttypes>
-          <eventtypes>CREATE</eventtypes>
-          <isinactive>F</isinactive>
-          <resultfield></resultfield>
-          <scheduledelay></scheduledelay>
-          <schedulemode>DELAY</schedulemode>
-          <schedulerecurrence></schedulerecurrence>
-          <scheduletimeofday></scheduletimeofday>
-          <scheduletimeunit></scheduletimeunit>
-          <scripttype>[scriptid=customscript_nm_send_invoice_email_autom]</scripttype>
-          <initcondition>
-            <formula><![CDATA[isChecked("Customer:Send Invoice Email") = 'T']]></formula>
-            <type>VISUAL_BUILDER</type>
-            <parameters>
-              <parameter>
-                <name>Customer:Send Invoice Email</name>
-                <value>STDBODYCUSTOMER:[scriptid=custentity_send_invoice_email]</value>
-              </parameter>
-            </parameters>
-          </initcondition>
-        </customaction>
       </workflowactions>
       <workflowtransitions>
         <workflowtransition scriptid="workflowtransition247">

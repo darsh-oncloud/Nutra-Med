@@ -350,7 +350,12 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/render', 'N/email'],
                 }
 
                 /* ---------- NEW: lots + expiry from the IF ---------- */
-                if (ifLots[line]) setInvoiceLineLots(invoice, i, ifLots[line], flat ? flat.qty : fulfilledQty, line);
+                if (ifLots[line]) {
+                    invoice.setSublistValue({ sublistId: 'item', fieldId: 'custcol_nscs_lot_number_porec', line: i,
+                        value: ifLots[line].map((l) => l.number).join(', ').substring(0, 300) });
+                    invoice.setSublistValue({ sublistId: 'item', fieldId: 'custcol_so_expiration_date', line: i,
+                        value: ifLots[line].map((l) => l.expiry).join(', ').substring(0, 300) });
+                }
 
                 matched++;
                 if (!shipped) {

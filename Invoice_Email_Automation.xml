@@ -15,8 +15,14 @@
   <releasestatus>RELEASED</releasestatus>
   <runasadmin>T</runasadmin>
   <initcondition>
-    <formula></formula>
+    <formula><![CDATA["Created Date" >= '2026-11-20']]></formula>
     <type>VISUAL_BUILDER</type>
+    <parameters>
+      <parameter>
+        <name>Created Date</name>
+        <value>[scriptid=custbody_esc_created_date]</value>
+      </parameter>
+    </parameters>
   </initcondition>
   <workflowstates>
     <workflowstate scriptid="workflowstate82">

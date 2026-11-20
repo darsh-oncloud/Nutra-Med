@@ -39,7 +39,7 @@
           <scheduletimeunit></scheduletimeunit>
           <scripttype>[scriptid=customscript_nm_send_invoice_email_autom]</scripttype>
           <initcondition>
-            <formula><![CDATA[isChecked("Customer:Send Invoice Email") = 'T' AND isChecked("Email Sent") = 'F' AND "Created Date" >= '2026-11-20']]></formula>
+            <formula><![CDATA[isChecked("Customer:Send Invoice Email") = 'T' AND isChecked("Email Sent") = 'F']]></formula>
             <type>VISUAL_BUILDER</type>
             <parameters>
               <parameter>
@@ -49,10 +49,6 @@
               <parameter>
                 <name>Email Sent</name>
                 <value>[scriptid=custbody_email_sent]</value>
-              </parameter>
-              <parameter>
-                <name>Created Date</name>
-                <value>[scriptid=custbody_esc_created_date]</value>
               </parameter>
             </parameters>
           </initcondition>

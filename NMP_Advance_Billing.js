@@ -207,22 +207,33 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/workflow'],
 
                 const rate = +get('rate') || 0;
                 const amount = +get('amount') || 0;
+                // if (rate === 0 && amount > 0) {
+                //     const soQty = +get('quantity') || 0;
+                //     const billedQty = +get('quantitybilled') || 0;
+                //     flatLines[lineId] = {
+                //         amount,
+                //         qty: soQty - billedQty,
+                //         alreadyBilled: billedQty >= soQty
+                //     };
+                // }
                 if (rate === 0 && amount > 0) {
-                    const soQty = +get('quantity') || 0;
                     const billedQty = +get('quantitybilled') || 0;
                     flatLines[lineId] = {
                         amount,
-                        qty: soQty - billedQty,
-                        alreadyBilled: billedQty >= soQty
+                        alreadyBilled: billedQty > 0   // flat amount already invoiced -> next invoices are $0
                     };
-                }
+                }              
             }
             if (Object.keys(flatLines).length) log.audit('Flat Rate Lines', flatLines);
 
-            const expected = Object.keys(lines).filter((l) => !(flatLines[l] && flatLines[l].alreadyBilled)).length;
+            const expected = Object.keys(lines).length;
             if (!expected) {
-                return log.audit('Script Stopped', { reason: 'Nothing to invoice - flat rate line(s) already fully billed', ifNumber, soId });
-            }
+                return log.audit('Script Stopped', { reason: 'Nothing to invoice', ifNumber, soId });
+            }          
+            // const expected = Object.keys(lines).filter((l) => !(flatLines[l] && flatLines[l].alreadyBilled)).length;
+            // if (!expected) {
+            //     return log.audit('Script Stopped', { reason: 'Nothing to invoice - flat rate line(s) already fully billed', ifNumber, soId });
+            // }
 
             /* ---------- Build invoice ---------- */
             const invoice = record.transform({
@@ -249,18 +260,31 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/workflow'],
                 const fulfilledQty = lines[line];
                 const flat = flatLines[line];
 
-                if (!fulfilledQty || (flat && flat.alreadyBilled)) {
-                    if (flat && flat.alreadyBilled) log.audit('Flat Rate Skipped (already fully billed)', { line });
+                if (!fulfilledQty) {
                     invoice.removeLine({ sublistId: 'item', line: i });
                     continue;
                 }
 
                 if (flat) {
-                    invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: flat.qty });
-                    invoice.setSublistValue({ sublistId: 'item', fieldId: 'amount', line: i, value: flat.amount });
-                    flatToVerify[line] = flat.amount;
-                    log.audit('Flat Rate Billed (full qty + amount)', { line, fulfilledQty, billedQty: flat.qty, amount: flat.amount });
-                } else {
+                    const flatAmount = flat.alreadyBilled ? 0 : flat.amount;
+                    invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: fulfilledQty });
+                    invoice.setSublistValue({ sublistId: 'item', fieldId: 'amount', line: i, value: flatAmount });
+                    flatToVerify[line] = flatAmount;
+                    log.audit(flat.alreadyBilled ? 'Flat Rate Billed at $0 (amount already invoiced)' : 'Flat Rate Billed (fulfilled qty + full amount)',
+                        { line, fulfilledQty, amount: flatAmount });
+                } else {              
+                // if (!fulfilledQty || (flat && flat.alreadyBilled)) {
+                //     if (flat && flat.alreadyBilled) log.audit('Flat Rate Skipped (already fully billed)', { line });
+                //     invoice.removeLine({ sublistId: 'item', line: i });
+                //     continue;
+                // }
+
+                // if (flat) {
+                //     invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: flat.qty });
+                //     invoice.setSublistValue({ sublistId: 'item', fieldId: 'amount', line: i, value: flat.amount });
+                //     flatToVerify[line] = flat.amount;
+                //     log.audit('Flat Rate Billed (full qty + amount)', { line, fulfilledQty, billedQty: flat.qty, amount: flat.amount });
+                // } else {
                     invoice.setSublistValue({ sublistId: 'item', fieldId: 'quantity', line: i, value: fulfilledQty });
                 }
 
@@ -283,7 +307,8 @@ define(['N/record', 'N/search', 'N/runtime', 'N/log', 'N/workflow'],
 
             log.audit('Invoice Ready', { ifNumber, matched, expected, fulfillmentLines: Object.keys(lines).length });
 
-            if (!matched) return log.audit('Script Stopped', 'Nothing to invoice (flat rate already billed or no lines matched)');
+            //if (!matched) return log.audit('Script Stopped', 'Nothing to invoice (flat rate already billed or no lines matched)');
+            if (!matched) return log.audit('Script Stopped', 'Nothing to invoice (no lines matched)');          
             if (matched !== expected) throw Error('Some IF lines are missing from invoice transform');
 
             /* ---------- Advance billing COGS ---------- */
